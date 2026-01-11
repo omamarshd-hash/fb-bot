@@ -22,7 +22,7 @@ groq_client = Groq(api_key=GROQ_API_KEY)
 # ================================
 def generate_ai_reply(user_message):
     response = groq_client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
+        model="llama3-8b-8192",
         messages=[
             {
                 "role": "system",
