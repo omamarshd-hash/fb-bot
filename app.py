@@ -10,15 +10,41 @@ app = Flask(__name__)
 # ================================
 VERIFY_TOKEN = "my_verify_token_123"
 
-# ⚠️ For now this is hardcoded (later move to env var)
+# ⚠️ Hardcoded for now (move to env vars later)
 PAGE_ACCESS_TOKEN = "EAAUA4t3PrrQBQVEhZASv2ZCwziqqVYnGhGeR4OkSH9t4gcczIQFbFj8y3ruBVnIInqDZABp7TZAdZAOxUzjTUWFASxH2igNUlo9QAnv6gXlIf18t292aWqHwZAW0pWPTY4GipiW7ZBxdjbzPkNg8FhjqYTktoszaWPHWwryzRT5k2MjyQ8h2sHta536JlCGy2ZCIemtZAFSNYWAZDZD"
 
-# ✅ Groq API key from Render env vars
+# ================================
+# Groq Setup
+# ================================
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 groq_client = Groq(api_key=GROQ_API_KEY)
 
 # ================================
-# Groq AI function
+# Spam / Automation Filter
+# ================================
+def is_real_user_message(messaging_event):
+    message = messaging_event.get("message")
+    if not message:
+        return False
+
+    # Ignore echoes
+    if message.get("is_echo"):
+        return False
+
+    text = message.get("text")
+    if not text:
+        return False
+
+    text = text.strip()
+
+    # Ignore very short / automation-like messages
+    if len(text) < 2:
+        return False
+
+    return True
+
+# ================================
+# Groq AI Function
 # ================================
 def generate_ai_reply(user_message):
     response = groq_client.chat.completions.create(
@@ -39,7 +65,7 @@ def generate_ai_reply(user_message):
     return response.choices[0].message.content.strip()
 
 # ================================
-# Facebook Send API helper
+# Facebook Send API
 # ================================
 def send_message(recipient_id, text):
     url = "https://graph.facebook.com/v18.0/me/messages"
@@ -69,7 +95,7 @@ def webhook():
 
         return "Verification failed", 403
 
-    # ---- Incoming messages ----
+    # ---- Incoming Messages ----
     if request.method == "POST":
         data = request.get_json()
         print("RAW PAYLOAD RECEIVED:")
@@ -79,29 +105,26 @@ def webhook():
         for entry in data.get("entry", []):
             for messaging_event in entry.get("messaging", []):
 
-                # Ignore echoes
-                if messaging_event.get("message", {}).get("is_echo"):
+                # 🚫 Spam / automation filter
+                if not is_real_user_message(messaging_event):
                     continue
 
-                sender_id = messaging_event.get("sender", {}).get("id")
+                sender_id = messaging_event["sender"]["id"]
+                message_text = messaging_event["message"]["text"]
 
-                if "message" in messaging_event:
-                    message_text = messaging_event["message"].get("text")
+                print("NEW MESSAGE RECEIVED")
+                print("From sender ID:", sender_id)
+                print("Message:", message_text)
+                print("-" * 50)
 
-                    if message_text:
-                        print("NEW MESSAGE RECEIVED")
-                        print("From sender ID:", sender_id)
-                        print("Message:", message_text)
-                        print("-" * 50)
+                # 🤖 AI reply with safety
+                try:
+                    reply = generate_ai_reply(message_text)
+                except Exception as e:
+                    print("GROQ ERROR:", str(e))
+                    reply = "Sorry, I’m having trouble replying right now."
 
-                        # ✅ AI reply with safety
-                        try:
-                            reply = generate_ai_reply(message_text)
-                        except Exception as e:
-                            print("GROQ ERROR:", str(e))
-                            reply = "Sorry, I’m having trouble replying right now."
-
-                        send_message(sender_id, reply)
+                send_message(sender_id, reply)
 
         return "EVENT_RECEIVED", 200
 
