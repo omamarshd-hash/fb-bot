@@ -1,14 +1,42 @@
 from flask import Flask, request
 import requests
+from groq import Groq
+import os
 
 app = Flask(__name__)
 
-# MUST match Meta dashboard
+# ================================
+# Tokens
+# ================================
 VERIFY_TOKEN = "my_verify_token_123"
 
-# 🔑 Page Access Token (KEEP THIS SECRET)
+# ⚠️ For now this is hardcoded (later move to env var)
 PAGE_ACCESS_TOKEN = "EAAUA4t3PrrQBQVEhZASv2ZCwziqqVYnGhGeR4OkSH9t4gcczIQFbFj8y3ruBVnIInqDZABp7TZAdZAOxUzjTUWFASxH2igNUlo9QAnv6gXlIf18t292aWqHwZAW0pWPTY4GipiW7ZBxdjbzPkNg8FhjqYTktoszaWPHWwryzRT5k2MjyQ8h2sHta536JlCGy2ZCIemtZAFSNYWAZDZD"
 
+# ✅ Groq API key from Render env vars
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+groq_client = Groq(api_key=GROQ_API_KEY)
+
+# ================================
+# Groq AI function
+# ================================
+def generate_ai_reply(user_message):
+    response = groq_client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a helpful, polite assistant replying to Facebook messages."
+            },
+            {
+                "role": "user",
+                "content": user_message
+            }
+        ],
+        max_tokens=150,
+        temperature=0.6
+    )
+    return response.choices[0].message.content.strip()
 
 # ================================
 # Facebook Send API helper
@@ -22,14 +50,14 @@ def send_message(recipient_id, text):
     }
     requests.post(url, params=params, json=payload)
 
-
+# ================================
+# Webhook
+# ================================
 @app.route("/webhook", methods=["GET", "POST"])
 def webhook():
     print("WEBHOOK HIT:", request.method)
 
-    # ================================
-    # Webhook Verification
-    # ================================
+    # ---- Verification ----
     if request.method == "GET":
         mode = request.args.get("hub.mode")
         token = request.args.get("hub.verify_token")
@@ -41,9 +69,7 @@ def webhook():
 
         return "Verification failed", 403
 
-    # ================================
-    # Incoming Messages
-    # ================================
+    # ---- Incoming messages ----
     if request.method == "POST":
         data = request.get_json()
         print("RAW PAYLOAD RECEIVED:")
@@ -53,7 +79,7 @@ def webhook():
         for entry in data.get("entry", []):
             for messaging_event in entry.get("messaging", []):
 
-                # 🔁 Ignore echoes (VERY IMPORTANT)
+                # Ignore echoes
                 if messaging_event.get("message", {}).get("is_echo"):
                     continue
 
@@ -68,16 +94,20 @@ def webhook():
                         print("Message:", message_text)
                         print("-" * 50)
 
-                        # ✅ HARD-CODED REPLY
-                        send_message(sender_id, "Bot connected ✅")
+                        # ✅ AI reply with safety
+                        try:
+                            reply = generate_ai_reply(message_text)
+                        except Exception as e:
+                            print("GROQ ERROR:", str(e))
+                            reply = "Sorry, I’m having trouble replying right now."
+
+                        send_message(sender_id, reply)
 
         return "EVENT_RECEIVED", 200
-
 
 # ================================
 # Render Entry Point
 # ================================
 if __name__ == "__main__":
-    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
