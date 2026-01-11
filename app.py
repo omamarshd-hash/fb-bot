@@ -59,7 +59,7 @@ def is_real_user_message(messaging_event):
     return True
 
 # ================================
-# Groq AI Function (REFINED PROMPT)
+# Groq AI Reply (Precise DM Prompt)
 # ================================
 def generate_ai_reply(user_id, user_message):
     history = conversation_memory.get(user_id, [])
@@ -69,11 +69,9 @@ def generate_ai_reply(user_id, user_message):
             "role": "system",
             "content": (
                 "You are an assistant replying to Facebook and Instagram direct messages. "
-                "Your replies must be short, clear, and directly answer the user's question. "
-                "Do not sound like an AI. Do not give unnecessary explanations. "
-                "If a question is simple, reply in one or two sentences. "
-                "If information is missing, ask one clear follow-up question. "
-                "Avoid excessive emojis. Be natural and human."
+                "Replies must be short, clear, and directly answer the question. "
+                "Do not sound like an AI. Avoid unnecessary explanations. "
+                "If information is missing, ask one clear follow-up question."
             )
         }
     ]
@@ -84,11 +82,78 @@ def generate_ai_reply(user_id, user_message):
     response = groq_client.chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=messages,
-        max_tokens=80,          # 👈 tighter, non-generic replies
-        temperature=0.5         # 👈 more controlled, less random
+        max_tokens=80,
+        temperature=0.5
     )
 
     return response.choices[0].message.content.strip()
+
+# ================================
+# Summary Helpers (LIKE GMAIL BOT)
+# ================================
+def summarize_user_message(user_message):
+    try:
+        response = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Summarize the user's message in 4 to 5 words only. "
+                        "Be precise. No punctuation. No extra words."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": user_message
+                }
+            ],
+            max_tokens=10,
+            temperature=0.3
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print("USER SUMMARY ERROR:", str(e))
+        return "New user message"
+
+
+def summarize_bot_reply(bot_reply):
+    try:
+        response = groq_client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[
+                {
+                    "role": "system",
+                    "content": (
+                        "Summarize the assistant's reply in 4 to 5 words only. "
+                        "Be precise. No punctuation. No extra words."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": bot_reply
+                }
+            ],
+            max_tokens=10,
+            temperature=0.3
+        )
+        return response.choices[0].message.content.strip()
+    except Exception as e:
+        print("BOT SUMMARY ERROR:", str(e))
+        return "Bot replied to user"
+
+# ================================
+# Notification (Server-side)
+# ================================
+def notify_new_message(user_id, user_message, bot_reply):
+    user_summary = summarize_user_message(user_message)
+    bot_summary = summarize_bot_reply(bot_reply)
+
+    print("🔔 NEW MESSAGE SUMMARY")
+    print("User ID:", user_id)
+    print("User:", user_summary)
+    print("Bot:", bot_summary)
+    print("=" * 50)
 
 # ================================
 # Facebook Send API
@@ -164,8 +229,11 @@ def webhook():
                 # store bot reply
                 update_memory(sender_id, "assistant", reply)
 
-                # log conversation
+                # log full conversation
                 log_conversation(sender_id, message_text, reply)
+
+                # 🔔 notification summaries (separate)
+                notify_new_message(sender_id, message_text, reply)
 
         return "EVENT_RECEIVED", 200
 
