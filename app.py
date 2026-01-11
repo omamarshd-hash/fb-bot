@@ -11,7 +11,7 @@ app = Flask(__name__)
 # ================================
 VERIFY_TOKEN = "my_verify_token_123"
 
-# ⚠️ Hardcoded for now (move to env vars later)
+# ⚠️ Hardcoded for now (can move to env vars later)
 PAGE_ACCESS_TOKEN = "EAAUA4t3PrrQBQVEhZASv2ZCwziqqVYnGhGeR4OkSH9t4gcczIQFbFj8y3ruBVnIInqDZABp7TZAdZAOxUzjTUWFASxH2igNUlo9QAnv6gXlIf18t292aWqHwZAW0pWPTY4GipiW7ZBxdjbzPkNg8FhjqYTktoszaWPHWwryzRT5k2MjyQ8h2sHta536JlCGy2ZCIemtZAFSNYWAZDZD"
 
 # ================================
@@ -21,10 +21,10 @@ GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 groq_client = Groq(api_key=GROQ_API_KEY)
 
 # ================================
-# Conversation Memory
+# Conversation Memory (RAM)
 # ================================
 conversation_memory = {}
-MAX_MEMORY_MESSAGES = 10  # total (user + assistant)
+MAX_MEMORY_MESSAGES = 10  # user + assistant combined
 
 def update_memory(user_id, role, content):
     if user_id not in conversation_memory:
@@ -59,7 +59,7 @@ def is_real_user_message(messaging_event):
     return True
 
 # ================================
-# Groq AI Function (with memory)
+# Groq AI Function (SUPPORTED MODEL)
 # ================================
 def generate_ai_reply(user_id, user_message):
     history = conversation_memory.get(user_id, [])
@@ -75,7 +75,7 @@ def generate_ai_reply(user_id, user_message):
     messages.append({"role": "user", "content": user_message})
 
     response = groq_client.chat.completions.create(
-        model="llama3-8b-8192",
+        model="llama-3.1-8b-instant",
         messages=messages,
         max_tokens=150,
         temperature=0.6
@@ -96,7 +96,7 @@ def send_message(recipient_id, text):
     requests.post(url, params=params, json=payload)
 
 # ================================
-# Chat Logger (Notepad file)
+# Persistent Chat Logger (Notepad)
 # ================================
 def log_conversation(user_id, user_message, bot_reply):
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -119,6 +119,7 @@ def log_conversation(user_id, user_message, bot_reply):
 def webhook():
     print("WEBHOOK HIT:", request.method)
 
+    # ---- Verification ----
     if request.method == "GET":
         mode = request.args.get("hub.mode")
         token = request.args.get("hub.verify_token")
@@ -129,6 +130,7 @@ def webhook():
 
         return "Verification failed", 403
 
+    # ---- Incoming Messages ----
     if request.method == "POST":
         data = request.get_json()
 
@@ -155,7 +157,7 @@ def webhook():
                 # 🧠 store bot reply
                 update_memory(sender_id, "assistant", reply)
 
-                # 📝 log to notepad file
+                # 📝 log conversation
                 log_conversation(sender_id, message_text, reply)
 
         return "EVENT_RECEIVED", 200
