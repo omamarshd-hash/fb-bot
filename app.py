@@ -59,7 +59,7 @@ def is_real_user_message(messaging_event):
     return True
 
 # ================================
-# Groq AI Function (SUPPORTED MODEL)
+# Groq AI Function (REFINED PROMPT)
 # ================================
 def generate_ai_reply(user_id, user_message):
     history = conversation_memory.get(user_id, [])
@@ -67,7 +67,14 @@ def generate_ai_reply(user_id, user_message):
     messages = [
         {
             "role": "system",
-            "content": "You are a helpful, polite assistant replying to Facebook messages."
+            "content": (
+                "You are an assistant replying to Facebook and Instagram direct messages. "
+                "Your replies must be short, clear, and directly answer the user's question. "
+                "Do not sound like an AI. Do not give unnecessary explanations. "
+                "If a question is simple, reply in one or two sentences. "
+                "If information is missing, ask one clear follow-up question. "
+                "Avoid excessive emojis. Be natural and human."
+            )
         }
     ]
 
@@ -77,8 +84,8 @@ def generate_ai_reply(user_id, user_message):
     response = groq_client.chat.completions.create(
         model="llama-3.1-8b-instant",
         messages=messages,
-        max_tokens=150,
-        temperature=0.6
+        max_tokens=80,          # 👈 tighter, non-generic replies
+        temperature=0.5         # 👈 more controlled, less random
     )
 
     return response.choices[0].message.content.strip()
@@ -143,7 +150,7 @@ def webhook():
                 sender_id = messaging_event["sender"]["id"]
                 message_text = messaging_event["message"]["text"]
 
-                # 🧠 store user message
+                # store user message
                 update_memory(sender_id, "user", message_text)
 
                 try:
@@ -154,10 +161,10 @@ def webhook():
 
                 send_message(sender_id, reply)
 
-                # 🧠 store bot reply
+                # store bot reply
                 update_memory(sender_id, "assistant", reply)
 
-                # 📝 log conversation
+                # log conversation
                 log_conversation(sender_id, message_text, reply)
 
         return "EVENT_RECEIVED", 200
