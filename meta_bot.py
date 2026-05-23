@@ -21,9 +21,8 @@ GOVERNOR_URL = os.getenv("GOVERNOR_URL")
 # =========================================
 
 WHITELISTED_IDS = [
-    "2381442649051546",   # Instagram test account
-    # Facebook Messenger tester IDs go here
-    # "FACEBOOK_SENDER_ID",
+    "2381442649051546",       # Instagram test account
+    "33227605106886622",      # Facebook Messenger test account
 ]
 
 # =========================================
