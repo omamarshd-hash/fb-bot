@@ -124,9 +124,9 @@ def get_token_for_page(page_id, ceo_config):
 
 
 def send_instagram_reply(recipient_id, message_text, page_id=None, token=None):
-    pid = page_id or PAGE_ID
     tok = token or ACCESS_TOKEN
-    url = f"https://graph.facebook.com/v25.0/{pid}/messages"
+    # Instagram uses the /me/messages endpoint (like Facebook)
+    url = "https://graph.facebook.com/v25.0/me/messages"
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {tok}"}
     data = {
         "recipient": {"id": recipient_id},
